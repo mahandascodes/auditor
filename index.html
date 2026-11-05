@@ -7,7 +7,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>auditor</title>
+<title>Auditor</title>
 <style>
 :root{--bg:#EDF1F2;--surface:#fff;--ink:#12262B;--mute:#5C7177;--line:#D3DCDF;--accent:#0E6B6B;--accent-ink:#fff;--warn:#B4400F;--track:#DDE5E7;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -59,21 +59,30 @@ li.item .x{border:0;background:none;color:var(--mute);padding:4px 8px;font-size:
 .ed{width:100%}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:28px;align-items:center;color:var(--mute);font-size:14px}
 .foot input{width:80px}
+.seg{display:flex;margin-top:12px}.seg button{flex:1;border-radius:0}.seg button:first-child{border-radius:8px 0 0 8px}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg .on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+textarea{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;color:inherit;resize:vertical}
+.pr{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.pr .n{flex:1;min-width:130px}.pr .n small{color:var(--mute)}.pr select{flex:1;min-width:110px}.pr.dup{opacity:.55}
+.ce{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}.ce button{padding:3px 8px;font-size:13px;color:var(--mute)}
+.sv{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.sv input{width:130px;text-align:right}
 </style>
 </head>
 <body>
 <main>
 <div class="top">
-  <h1>auditor</h1>
+  <h1>Auditor</h1>
   <div class="month"><button id="prev" aria-label="Previous month">‹</button><b id="mlabel"></b><button id="next" aria-label="Next month">›</button></div>
 </div>
-<div class="left"><div class="sub">Left to spend</div><div class="big" id="left"></div><div class="bar" id="bar"><i></i></div></div>
+<div class="seg"><button id="segp">Personal</button><button id="segb">Business</button></div>
+<div class="left"><div class="sub">Left to spend</div><div class="big" id="left"></div><div class="sub" id="svnote"></div><div class="bar" id="bar"><i></i></div></div>
 <div class="row3">
   <div><small>Income</small><b id="inc"></b></div>
   <div><small>Spent</small><b id="sp"></b></div>
   <div><small>Budgeted</small><b id="pl"></b></div>
 </div>
 
+<div class="card sv"><b id="svl">Savings balance</b><input id="svb" type="number" inputmode="decimal" step="any" aria-label="Savings balance"></div>
 <h2>Budget by category</h2>
 <p class="hint">Type how much you plan to spend in each category this month. The bar fills up as you log expenses.</p>
 <div id="cats"></div>
@@ -86,6 +95,9 @@ li.item .x{border:0;background:none;color:var(--mute);padding:4px 8px;font-size:
   <select id="ec"></select>
   <button class="primary full" type="submit">Add expense</button>
 </form>
+
+<h2>Import M-Pesa messages</h2>
+<div class="card"><textarea id="mpt" rows="5" placeholder="Paste your M-Pesa messages here, as many as you like"></textarea><button class="primary" id="mpgo" style="width:100%;margin-top:8px">Read messages</button><div id="mpout"></div></div>
 
 <h2>Expenses this month</h2>
 <div class="card"><ul id="exl"></ul></div>
@@ -101,7 +113,7 @@ li.item .x{border:0;background:none;color:var(--mute);padding:4px 8px;font-size:
 <div class="foot">
   <label>Currency <input id="cur" maxlength="5"></label>
   <button id="reset">Clear this month</button>
-  <button id="exp">Export backup</button><button id="imp">Import backup</button><input type="file" id="impf" accept="application/json,.json" hidden><span>Saved on this device. Export a backup now and then.</span>
+  <label>Savings fund <input id="savn" style="width:120px"></label><button id="exp">Export backup</button><button id="imp">Import backup</button><input type="file" id="impf" accept="application/json,.json" hidden><span>Saved on this device. Export a backup now and then.</span>
 </div>
 </main>
 <script>
@@ -109,16 +121,17 @@ var DEF=["Housing & rent","Food & groceries","Utilities","Transport","Airtime & 
 var S;
 try{var r=localStorage.getItem("hb1");S=r?JSON.parse(r):null}catch(e){S=null}
 if(!S||!S.months)S={cur:"KSh",months:{}};
-if(!S.cats)S.cats=DEF.slice();
-CATS=S.cats;
+var BDEF=["Stock & supplies","Rent & utilities","Transport","Salaries & casuals","Airtime & data","Marketing","Licences & tax","Savings","Other"];
+function fix(){if(!S.cur)S.cur="KSh";if(Array.isArray(S.cats))S.cats={p:S.cats,b:BDEF.slice()};if(!S.cats)S.cats={p:DEF.slice(),b:BDEF.slice()};if(!S.cats.b)S.cats.b=BDEF.slice();if(!S.mode)S.mode="p";if(!S.codes)S.codes={};if(!S.map)S.map={};if(!S.savn)S.savn="ZIIDI";if(S.svBase==null)S.svBase=0;CATS=S.cats[S.mode]}
+fix();
 function save(){try{localStorage.setItem("hb1",JSON.stringify(S))}catch(e){}}
 var d=new Date(),ym=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
-function M(){
-  if(!S.months[ym]){
-    var keys=Object.keys(S.months).filter(function(k){return k<ym}).sort(),prev=keys.length?S.months[keys[keys.length-1]].budgets:{};
-    S.months[ym]={income:[],expenses:[],budgets:JSON.parse(JSON.stringify(prev))};
+function M(bk,y){bk=bk||S.mode;y=y||ym;var key=(bk==="b"?"b:":"")+y;
+  if(!S.months[key]){
+    var keys=Object.keys(S.months).filter(function(k){return (k.slice(0,2)==="b:"?"b":"p")===bk&&k<key}).sort(),prev=keys.length?S.months[keys[keys.length-1]].budgets:{};
+    S.months[key]={income:[],expenses:[],budgets:JSON.parse(JSON.stringify(prev))};
   }
-  return S.months[ym];
+  return S.months[key];
 }
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -131,7 +144,7 @@ function row(k,e){
  if(editing&&editing.k===k&&editing.id===e.id){
   return '<li class="item"><form class="ed" data-ed="'+k+'" data-id="'+e.id+'"><input name="n" value="'+esc(e.name)+'" required aria-label="Name"><input name="a" type="number" inputmode="decimal" min="0" step="any" value="'+e.amt+'" required aria-label="Amount">'+(k==="ex"?'<select name="c" class="full" aria-label="Category">'+CATS.map(function(c){return '<option'+(c===e.cat?' selected':'')+'>'+esc(c)+'</option>'}).join("")+'</select>':'')+'<button class="primary" type="submit">Save</button><button type="button" data-cancel="1">Cancel</button></form></li>';
  }
- return '<li class="item"><div class="n"><div>'+esc(e.name)+'</div>'+(k==="ex"?'<small>'+esc(e.cat)+' · '+esc(e.day)+'</small>':'')+'</div><b>'+fmt(e.amt)+'</b><button class="x" data-edit="'+k+'" data-id="'+e.id+'" aria-label="Edit">✎</button><button class="x" data-del="'+k+'" data-id="'+e.id+'" aria-label="Delete">×</button></li>';
+ return '<li class="item"><div class="n"><div>'+esc(e.name)+'</div>'+(k==="ex"?'<small>'+esc(e.cat)+' · '+esc(e.day)+'</small>':(e.sav?'<small>From savings</small>':''))+'</div><b>'+fmt(e.amt)+'</b><button class="x" data-edit="'+k+'" data-id="'+e.id+'" aria-label="Edit">✎</button><button class="x" data-del="'+k+'" data-id="'+e.id+'" aria-label="Delete">×</button></li>';
 }
 function paintCats(html,keep){var box=$("cats");
  if(!keep||box.children.length!==CATS.length){box.innerHTML=html;return}
@@ -140,26 +153,26 @@ function paintCats(html,keep){var box=$("cats");
   a.querySelector(".bar").outerHTML=b.querySelector(".bar").outerHTML;
   a.querySelector(".meta").outerHTML=b.querySelector(".meta").outerHTML}}
 function render(keep){
-  var m=M(),inc=sum(m.income),sp=sum(m.expenses),pl=CATS.reduce(function(t,c){return t+(m.budgets[c]||0)},0);
+  var m=M(),inc=sum(m.income.filter(function(x){return !x.sav})),fs=sum(m.income.filter(function(x){return x.sav})),sp=sum(m.expenses),pl=CATS.reduce(function(t,c){return t+(m.budgets[c]||0)},0);
   var p=ym.split("-");
   $("mlabel").textContent=new Date(+p[0],+p[1]-1,1).toLocaleDateString("en-US",{month:"long",year:"numeric"});
-  var left=inc-sp;
+  var left=inc+fs-sp;
   $("left").textContent=fmt(left);$("left").className="big"+(left<0?" neg":"");
-  var pct=inc>0?Math.min(100,sp/inc*100):(sp>0?100:0);
-  $("bar").className="bar"+(sp>inc?" over":"");$("bar").firstChild.style.width=pct+"%";
-  $("inc").textContent=fmt(inc);$("sp").textContent=fmt(sp);$("pl").textContent=fmt(pl);
+  var pct=inc+fs>0?Math.min(100,sp/(inc+fs)*100):(sp>0?100:0);
+  $("bar").className="bar"+(sp>inc+fs?" over":"");$("bar").firstChild.style.width=pct+"%";
+  $("inc").textContent=fmt(inc);$("svnote").textContent=fs>0?"Includes "+fmt(fs)+" taken from savings":"";$("sp").textContent=fmt(sp);$("pl").textContent=fmt(pl);
   var cardsHtml=CATS.map(function(c){
     var spent=sum(m.expenses.filter(function(e){return e.cat===c})),b=m.budgets[c]||0,over=b>0&&spent>b,w=b>0?Math.min(100,spent/b*100):(spent>0?100:0);
     return '<div class="cat"><div class="h"><span>'+esc(c)+'</span><input data-b="'+esc(c)+'" type="number" inputmode="decimal" min="0" step="any" placeholder="Budget" aria-label="Budget for '+esc(c)+'" value="'+(b||"")+'"></div>'+
     '<div class="bar'+(over?" over":"")+'"><i style="width:'+w+'%"></i></div>'+
-    '<div class="meta"><span>Spent '+fmt(spent)+'</span><span'+(over?' class="o"':"")+'>'+(b>0?(over?fmt(spent-b)+" over":fmt(b-spent)+" left"):"No budget set")+'</span></div></div>';
+    '<div class="meta"><span>Spent '+fmt(spent)+'</span><span'+(over?' class="o"':"")+'>'+(b>0?(over?fmt(spent-b)+" over":fmt(b-spent)+" left"):"No budget set")+'</span></div><div class="ce"><button data-ren="'+esc(c)+'">Rename</button><button data-rm="'+esc(c)+'">Remove</button></div></div>';
   }).join("");
   paintCats(cardsHtml,keep);
   $("exl").innerHTML=m.expenses.length?m.expenses.slice().reverse().map(function(e){return row("ex",e)}).join(""):'<li class="empty">No expenses yet. Add your first one above.</li>';
   $("inl").innerHTML=m.income.length?m.income.map(function(e){return row("in",e)}).join(""):'<li class="empty">No income yet. Add your salary or other income.</li>';
-  $("cur").value=S.cur;
+  $("cur").value=S.cur;$("savn").value=S.savn;$("svl").textContent="Savings balance ("+S.savn.split(",")[0].trim()+")";if(document.activeElement!==$("svb"))$("svb").value=Math.round(svBal());$("segp").className=S.mode==="p"?"on":"";$("segb").className=S.mode==="b"?"on":"";
 }
-function fillSel(){var v=$("ec").value;$("ec").innerHTML=CATS.map(function(c){return "<option>"+esc(c)+"</option>"}).join("");if(v)$("ec").value=v}
+function fillSel(){var v=$("ec").value;$("ec").innerHTML=CATS.map(function(c){return "<option>"+esc(c)+"</option>"}).join("");if(v)$("ec").value=v;if($("ec").selectedIndex<0)$("ec").selectedIndex=0}
 $("prev").onclick=function(){shift(-1)};$("next").onclick=function(){shift(1)};
 $("ef").onsubmit=function(e){e.preventDefault();var a=parseFloat($("ea").value);if(!(a>=0))return;
   M().expenses.push({id:uid(),name:$("en").value.trim(),amt:a,cat:$("ec").value,day:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})});
@@ -170,7 +183,7 @@ document.addEventListener("change",function(e){var c=e.target.getAttribute&&e.ta
   if(c){var v=parseFloat(e.target.value);M().budgets[c]=v>0?v:0;save();render()}});
 document.addEventListener("click",function(e){var t=e.target.closest&&e.target.closest("[data-del]");if(!t)return;
   var m=M(),k=t.getAttribute("data-del")==="ex"?"expenses":"income",id=t.getAttribute("data-id");
-  m[k]=m[k].filter(function(x){return x.id!==id});save();render()});
+  m[k].forEach(function(x){if(x.id===id&&x.code)delete S.codes[x.code]});m[k]=m[k].filter(function(x){return x.id!==id});save();render()});
 $("cur").onchange=function(){S.cur=this.value.trim()||"KSh";save();render()};
 $("reset").onclick=function(){if(confirm("Clear all expenses and income for this month? Your plan stays.")){var m=M();m.expenses=[];m.income=[];save();render()}};
 document.addEventListener("click",function(e){var t=e.target.closest&&e.target.closest("[data-edit],[data-cancel]");if(!t)return;
@@ -181,12 +194,74 @@ document.addEventListener("submit",function(e){var f=e.target;if(!f.hasAttribute
   editing=null;save();render()});
 document.addEventListener("input",function(e){var c=e.target.getAttribute&&e.target.getAttribute("data-b");
   if(c){var v=parseFloat(e.target.value);M().budgets[c]=v>0?v:0;save();render(true)}});
-$("cf").onsubmit=function(e){e.preventDefault();var n=$("cn").value.trim();if(n&&CATS.indexOf(n)<0){CATS.push(n);S.cats=CATS;save();fillSel()}$("cn").value="";render()};
+$("cf").onsubmit=function(e){e.preventDefault();var n=$("cn").value.trim();if(n&&CATS.indexOf(n)<0){CATS.push(n);S.cats[S.mode]=CATS;save();fillSel()}$("cn").value="";render()};
 $("exp").onclick=function(){var b=new Blob([JSON.stringify(S,null,1)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="budget-backup-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},1000)};
 $("imp").onclick=function(){$("impf").click()};
-$("impf").onchange=function(){var f=this.files[0],inp=this;if(!f)return;var rd=new FileReader();rd.onload=function(){try{var d=JSON.parse(rd.result);if(!d||typeof d.months!=="object")throw 0;if(!confirm("Replace everything in the app with this backup?")){inp.value="";return}S=d;if(!S.cats)S.cats=DEF.slice();if(!S.cur)S.cur="KSh";CATS=S.cats;save();fillSel();render()}catch(e){alert("That file isn\u2019t a valid budget backup.")}inp.value=""};rd.readAsText(f)};
+$("impf").onchange=function(){var f=this.files[0],inp=this;if(!f)return;var rd=new FileReader();rd.onload=function(){try{var d=JSON.parse(rd.result);if(!d||typeof d.months!=="object")throw 0;if(!confirm("Replace everything in the app with this backup?")){inp.value="";return}S=d;fix();save();fillSel();render()}catch(e){alert("That file isn\u2019t a valid budget backup.")}inp.value=""};rd.readAsText(f)};
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 if("serviceWorker" in navigator)window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})});
+function setMode(b){S.mode=b;CATS=S.cats[b];editing=null;save();fillSel();render()}
+$("segp").onclick=function(){setMode("p")};$("segb").onclick=function(){setMode("b")};
+var PEND=[],BAD=0;
+function isSav(n){n=n.toLowerCase();return (S.savn||"ZIIDI").split(",").some(function(x){x=x.trim().toLowerCase();return x&&n.indexOf(x)>-1})}
+function flows(){var f=0;Object.keys(S.months).forEach(function(k){var m=S.months[k];m.income.forEach(function(x){if(x.sav===1)f-=x.amt});m.expenses.forEach(function(x){if(x.sav===2)f+=x.amt-(x.fee||0)})});return f}
+function svBal(){return (S.svBase||0)+flows()}
+var PSV=null,PSVon=true;
+function zBal(t){var nm0=(S.savn||"ZIIDI").split(",")[0].trim().replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),best=null,m;
+  [new RegExp(nm0+"\\s+balance\\s+is\\s*Ksh\\.?\\s*([\\d,]+\\.?\\d*)","gi"),/You have (?:successfully )?(?:deposited|withdrawn|invested)[\s\S]{0,160}?\bbalance\s+is\s*Ksh\.?\s*([\d,]+\.?\d*)/gi].forEach(function(re){
+    while((m=re.exec(t))){if(!best||m.index>=best.i)best={i:m.index,v:parseFloat(m[1].replace(/,/g,""))}}});
+  return best?best.v:null}
+function nm(s){return s.replace(/https?:\/\/\S+/g,"").replace(/\s+for account.*$/i,"").replace(/\s+\d{9,12}\s*$/,"").replace(/\s+/g," ").replace(/[.\s]+$/,"").trim()}
+function num(s){return parseFloat(s.replace(/,/g,""))}
+function parseMp(t){
+  t=t.replace(/https?:\/\/\S+/g,"");
+  var re=/\b[A-Z0-9]{10}\s+Confirmed/g,idx=[],mm;
+  while((mm=re.exec(t)))idx.push(mm.index);
+  var out=[],bad=0;
+  idx.forEach(function(st,i){
+    var s=t.slice(st,i+1<idx.length?idx[i+1]:t.length),dm=s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})/),cm=s.match(/Transaction cost,?\s*Ksh\s?([\d,]+\.?\d*)/),a,type,name,amt;
+    if(!dm){bad++;return}
+    if(a=s.match(/received\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+on\s+\d/i)){type="in";amt=num(a[1]);name=nm(a[2])}
+    else if(a=s.match(/Withdraw\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+New M-PESA/i)){type="ex";amt=num(a[1]);name="Cash withdrawal \u2013 "+nm(a[2]).replace(/^\d+\s*-\s*/,"")}
+    else if(a=s.match(/Ksh\s?([\d,]+\.?\d*)\s+(?:paid to|sent to)\s+(.+?)\s+on\s+\d/i)){type="ex";amt=num(a[1]);name=nm(a[2])}
+    else if(a=s.match(/bought\s+Ksh\s?([\d,]+\.?\d*)\s+of airtime/i)){type="ex";amt=num(a[1]);name="Airtime"}
+    else{bad++;return}
+    var cost=cm?num(cm[1]):0,y=+dm[3];if(y<100)y+=2000;
+    out.push({code:s.slice(0,10),sv:isSav(name)?(type==="in"?1:2):0,type:type,amt:amt+(type==="ex"?cost:0),fee:type==="ex"?cost:0,name:name,y:y,mo:+dm[2],d:+dm[1],book:S.mode,on:true});
+  });
+  return {items:out,bad:bad};
+}
+function cat0(it){if(it.sv===2&&S.cats[it.book].indexOf("Savings")>-1)return "Savings";var c=S.map[it.book+"|"+it.name.toLowerCase()]||(/airtime/i.test(it.name)?"Airtime & data":"Other");return S.cats[it.book].indexOf(c)<0?"Other":c}
+function showP(){
+  if(!PEND.length&&PSV==null){$("mpout").innerHTML='<p class="empty">I couldn\u2019t find any M-Pesa messages in that text.</p>';return}
+  var n=0,h=PEND.map(function(it,i){var dup=S.codes[it.code];if(it.on&&!dup)n++;
+    return '<div class="pr'+(dup?' dup':'')+'"><input type="checkbox" aria-label="Include" data-i="'+i+'" data-f="on"'+(it.on&&!dup?' checked':'')+(dup?' disabled':'')+'><div class="n"><div>'+esc(it.name)+'</div><small>'+it.d+'/'+it.mo+'/'+it.y+(it.sv===1?' \u00b7 from savings':it.sv===2?' \u00b7 to savings':it.type==="in"?' \u00b7 money in':'')+(it.fee?' \u00b7 incl. '+fmt(it.fee)+' fee':'')+(dup?' \u00b7 already added':'')+'</small></div><b>'+fmt(it.amt)+'</b>'+
+    '<select data-i="'+i+'" data-f="book" aria-label="Book"><option value="p"'+(it.book==="p"?' selected':'')+'>Personal</option><option value="b"'+(it.book==="b"?' selected':'')+'>Business</option></select>'+
+    (it.type==="ex"?'<select data-i="'+i+'" data-f="cat" aria-label="Category">'+S.cats[it.book].map(function(c){return '<option'+(c===it.cat?' selected':'')+'>'+esc(c)+'</option>'}).join("")+'</select>':'')+'</div>'}).join("");
+  $("mpout").innerHTML=h+(PSV!=null?'<label class="pr"><input type="checkbox" id="psv"'+(PSVon?' checked':'')+'><div class="n"><div>Set savings balance to '+fmt(PSV)+'</div><small>From your '+esc(S.savn.split(",")[0].trim())+' message</small></div></label>':'')+(BAD?'<p class="empty">'+BAD+' message'+(BAD>1?'s':'')+' skipped because I couldn\u2019t read '+(BAD>1?'them':'it')+'.</p>':'')+'<button class="primary" id="mpadd" style="margin-top:10px;width:100%">'+(n?"Add "+n+" to my books":"Save")+'</button>';
+}
+$("mpgo").onclick=function(){var r=parseMp($("mpt").value);PEND=r.items;BAD=r.bad;PSV=zBal($("mpt").value);PSVon=true;PEND.forEach(function(it){it.cat=cat0(it)});showP()};
+$("mpout").addEventListener("change",function(e){var t=e.target,i=t.getAttribute("data-i");if(t.id==="psv"){PSVon=t.checked;return}if(i===null)return;var it=PEND[+i],f=t.getAttribute("data-f");
+  if(f==="on")it.on=t.checked;else if(f==="book"){it.book=t.value;it.cat=cat0(it)}else it.cat=t.value;showP()});
+$("mpout").addEventListener("click",function(e){if(e.target.id!=="mpadd")return;var n=0;
+  PEND.forEach(function(it){if(!it.on||S.codes[it.code])return;
+    var m=M(it.book,it.y+"-"+String(it.mo).padStart(2,"0")),day=new Date(it.y,it.mo-1,it.d).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+    if(it.type==="in")m.income.push({id:uid(),name:it.sv===1?"From savings \u2013 "+it.name:it.name,amt:it.amt,code:it.code,sav:it.sv===1?1:0});
+    else{m.expenses.push({id:uid(),name:it.name,amt:it.amt,cat:it.cat,day:day,code:it.code,fee:it.fee,sav:it.sv===2?2:0});S.map[it.book+"|"+it.name.toLowerCase()]=it.cat}
+    S.codes[it.code]=1;n++});
+  if(PSV!=null&&PSVon)S.svBase=PSV-flows();PSV=null;save();PEND=[];$("mpt").value="";$("mpout").innerHTML='<p class="empty">Added '+n+'. Done for today.</p>';render()});
+$("svb").onchange=function(){S.svBase=(parseFloat(this.value)||0)-flows();save();render()};
+$("savn").onchange=function(){S.savn=this.value.trim()||"ZIIDI";save();render()};
+document.addEventListener("click",function(e){var t=e.target.closest&&e.target.closest("[data-ren],[data-rm]");if(!t)return;
+  var ren=t.hasAttribute("data-ren"),c=t.getAttribute(ren?"data-ren":"data-rm");
+  if(c==="Other"){alert("Other stays as it is, so nothing gets lost.");return}
+  function each(f){Object.keys(S.months).forEach(function(k){if((k.slice(0,2)==="b:"?"b":"p")===S.mode)f(S.months[k])})}
+  if(ren){var n=(prompt("Rename category",c)||"").trim();if(!n||n===c||CATS.indexOf(n)>-1)return;
+    CATS[CATS.indexOf(c)]=n;each(function(m){m.expenses.forEach(function(x){if(x.cat===c)x.cat=n});if(c in m.budgets){m.budgets[n]=m.budgets[c];delete m.budgets[c]}});
+    Object.keys(S.map).forEach(function(k){if(k.indexOf(S.mode+"|")===0&&S.map[k]===c)S.map[k]=n})}
+  else{if(!confirm("Remove "+c+"? Its expenses move to Other."))return;
+    CATS.splice(CATS.indexOf(c),1);each(function(m){m.expenses.forEach(function(x){if(x.cat===c)x.cat="Other"});delete m.budgets[c]})}
+  save();fillSel();render()});
 fillSel();
 render();
 </script>
