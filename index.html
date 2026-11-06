@@ -219,15 +219,17 @@ function parseMp(t){
   while((mm=re.exec(t)))idx.push(mm.index);
   var out=[],bad=0;
   idx.forEach(function(st,i){
-    var s=t.slice(st,i+1<idx.length?idx[i+1]:t.length),dm=s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})/),cm=s.match(/Transaction cost,?\s*Ksh\s?([\d,]+\.?\d*)/),a,type,name,amt;
-    if(!dm){bad++;return}
+    var s=t.slice(st,i+1<idx.length?idx[i+1]:t.length),dm=s.replace(/due on\s+\d{1,2}\/\d{1,2}\/\d{2,4}/i,"").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})/),cm=s.match(/Transaction cost,?\s*Ksh\s?([\d,]+\.?\d*)/),a,type,name,amt;
+    if(!dm){var td=new Date();dm=[0,String(td.getDate()),String(td.getMonth()+1),String(td.getFullYear())]}
     if(a=s.match(/received\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+on\s+\d/i)){type="in";amt=num(a[1]);name=nm(a[2]).replace(/\s+via\s+\S+$/i,"").replace(/\s+in\s+[A-Z]{2,3}$/,"")}
     else if(a=s.match(/Withdraw\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+New M-PESA/i)){type="ex";amt=num(a[1]);name="Cash withdrawal \u2013 "+nm(a[2]).replace(/^\d+\s*-\s*/,"")}
+    else if(a=s.match(/Fuliza M-PESA amount is Ksh\s?([\d,]+\.?\d*)\.?\s+Access Fee charged Ksh\s?([\d,]+\.?\d*)/i)){type="ex";amt=num(a[2]);name="Fuliza access fee"}
+    else if(a=s.match(/Ksh\s?([\d,]+\.?\d*)\s+from your M-PESA has been used to (?:fully |partially )?pay your outstanding Fuliza/i)){type="ex";amt=num(a[1]);name="Fuliza repayment"}
     else if(a=s.match(/Ksh\s?([\d,]+\.?\d*)\s+(?:paid to|sent to)\s+(.+?)\s+on\s+\d/i)){type="ex";amt=num(a[1]);name=nm(a[2])}
     else if(a=s.match(/bought\s+Ksh\s?([\d,]+\.?\d*)\s+of airtime/i)){type="ex";amt=num(a[1]);name="Airtime"}
     else{bad++;return}
     var cost=cm?num(cm[1]):0,y=+dm[3];if(y<100)y+=2000;
-    out.push({code:s.slice(0,10),sv:isSav(name)?(type==="in"?1:2):0,type:type,amt:amt+(type==="ex"?cost:0),fee:type==="ex"?cost:0,name:name,y:y,mo:+dm[2],d:+dm[1],book:S.mode,on:true});
+    out.push({code:s.slice(0,10)+(name==="Fuliza access fee"?"F":""),sv:isSav(name)?(type==="in"?1:2):0,type:type,amt:amt+(type==="ex"?cost:0),fee:type==="ex"?cost:0,name:name,y:y,mo:+dm[2],d:+dm[1],book:S.mode,on:name!=="Fuliza repayment",rp:name==="Fuliza repayment"});
   });
   return {items:out,bad:bad};
 }
@@ -235,7 +237,7 @@ function cat0(it){if(it.sv===2&&S.cats[it.book].indexOf("Savings")>-1)return "Sa
 function showP(){
   if(!PEND.length&&PSV==null){$("mpout").innerHTML='<p class="empty">I couldn\u2019t find any M-Pesa messages in that text.</p>';return}
   var n=0,h=PEND.map(function(it,i){var dup=S.codes[it.code];if(it.on&&!dup)n++;
-    return '<div class="pr'+(dup?' dup':'')+'"><input type="checkbox" aria-label="Include" data-i="'+i+'" data-f="on"'+(it.on&&!dup?' checked':'')+(dup?' disabled':'')+'><div class="n"><div>'+esc(it.name)+'</div><small>'+it.d+'/'+it.mo+'/'+it.y+(it.sv===1?' \u00b7 from savings':it.sv===2?' \u00b7 to savings':it.type==="in"?' \u00b7 money in':'')+(it.fee?' \u00b7 incl. '+fmt(it.fee)+' fee':'')+(dup?' \u00b7 already added':'')+'</small></div><b>'+fmt(it.amt)+'</b>'+
+    return '<div class="pr'+(dup?' dup':'')+'"><input type="checkbox" aria-label="Include" data-i="'+i+'" data-f="on"'+(it.on&&!dup?' checked':'')+(dup?' disabled':'')+'><div class="n"><div>'+esc(it.name)+'</div><small>'+it.d+'/'+it.mo+'/'+it.y+(it.rp?' \u00b7 repays a loan, already counted':it.sv===1?' \u00b7 from savings':it.sv===2?' \u00b7 to savings':it.type==="in"?' \u00b7 money in':'')+(it.fee?' \u00b7 incl. '+fmt(it.fee)+' fee':'')+(dup?' \u00b7 already added':'')+'</small></div><b>'+fmt(it.amt)+'</b>'+
     '<select data-i="'+i+'" data-f="book" aria-label="Book"><option value="p"'+(it.book==="p"?' selected':'')+'>Personal</option><option value="b"'+(it.book==="b"?' selected':'')+'>Business</option></select>'+
     (it.type==="ex"?'<select data-i="'+i+'" data-f="cat" aria-label="Category">'+S.cats[it.book].map(function(c){return '<option'+(c===it.cat?' selected':'')+'>'+esc(c)+'</option>'}).join("")+'</select>':'')+'</div>'}).join("");
   $("mpout").innerHTML=h+(PSV!=null?'<label class="pr"><input type="checkbox" id="psv"'+(PSVon?' checked':'')+'><div class="n"><div>Set savings balance to '+fmt(PSV)+'</div><small>From your '+esc(S.savn.split(",")[0].trim())+' message</small></div></label>':'')+(BAD?'<p class="empty">'+BAD+' message'+(BAD>1?'s':'')+' skipped because I couldn\u2019t read '+(BAD>1?'them':'it')+'.</p>':'')+'<button class="primary" id="mpadd" style="margin-top:10px;width:100%">'+(n?"Add "+n+" to my books":"Save")+'</button>';
