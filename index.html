@@ -215,13 +215,13 @@ function nm(s){return s.replace(/https?:\/\/\S+/g,"").replace(/\s+for account.*$
 function num(s){return parseFloat(s.replace(/,/g,""))}
 function parseMp(t){
   t=t.replace(/https?:\/\/\S+/g,"");
-  var re=/\b[A-Z0-9]{10}\s+Confirmed/g,idx=[],mm;
+  var re=/\b[A-Z0-9]{10}\s+[Cc]onfirmed/g,idx=[],mm;
   while((mm=re.exec(t)))idx.push(mm.index);
   var out=[],bad=0;
   idx.forEach(function(st,i){
     var s=t.slice(st,i+1<idx.length?idx[i+1]:t.length),dm=s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})/),cm=s.match(/Transaction cost,?\s*Ksh\s?([\d,]+\.?\d*)/),a,type,name,amt;
     if(!dm){bad++;return}
-    if(a=s.match(/received\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+on\s+\d/i)){type="in";amt=num(a[1]);name=nm(a[2])}
+    if(a=s.match(/received\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+on\s+\d/i)){type="in";amt=num(a[1]);name=nm(a[2]).replace(/\s+via\s+\S+$/i,"").replace(/\s+in\s+[A-Z]{2,3}$/,"")}
     else if(a=s.match(/Withdraw\s+Ksh\s?([\d,]+\.?\d*)\s+from\s+(.+?)\s+New M-PESA/i)){type="ex";amt=num(a[1]);name="Cash withdrawal \u2013 "+nm(a[2]).replace(/^\d+\s*-\s*/,"")}
     else if(a=s.match(/Ksh\s?([\d,]+\.?\d*)\s+(?:paid to|sent to)\s+(.+?)\s+on\s+\d/i)){type="ex";amt=num(a[1]);name=nm(a[2])}
     else if(a=s.match(/bought\s+Ksh\s?([\d,]+\.?\d*)\s+of airtime/i)){type="ex";amt=num(a[1]);name="Airtime"}
